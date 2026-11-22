@@ -14,7 +14,7 @@ Run `npm run build` to build the Sites Worker at `dist/server/index.js`. To rege
 
 ## Data and model scope
 
-The website includes project candidate identities and selected qualitative findings supported by the supplied workflow and scripts. The final study tables, candidate poses, verified simulation outputs, and saved model were unavailable. The website does not run training, docking, dynamics, or live model predictions.
+The website includes the supplied structural results, redocking summary, model evaluation, selected PLIP pose annotations, and analogue screening totals. Source names are shown by each result. The analogue workbook’s scaffold breakdown differs between its overview and ranked list, so the site uses the agreed aggregate count of 22. Verified molecular dynamics outputs and a saved model were unavailable. The website does not run training, docking, dynamics, or live model predictions.
 
 Candidate depictions were rendered offline by RDKit from the PubChem-derived SMILES after confirming the reported molecular formula and InChIKey. PubChem is the source of chemical identifiers and computed descriptors. See **TNIK & IPF Research** for the structure record, publications, and source links.
 

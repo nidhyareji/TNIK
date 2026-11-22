@@ -1,5 +1,6 @@
 import {candidates, evidenceFor, nextStepFor, publications, sources, target} from "./data.js";
 import {lookupCompound} from "./api.js";
+import {studyResults} from "./results.js";
 
 const main = document.querySelector("#main");
 const header = document.querySelector("#topbar");
@@ -112,6 +113,26 @@ function details(entries) {
   return `<dl class="details">${entries.map(([label, content]) => `<dt>${safe(label)}</dt><dd>${content}</dd>`).join("")}</dl>`;
 }
 
+const dockingFields = [
+  ["Docking score (kcal/mol)", "score", 3],
+  ["Nearby TNIK residues (within 4 Å)", "nearby"],
+  ["Shared JWK pocket residues", "overlap"],
+  ["Potential hydrogen-bond geometry candidates", "hydrogen"],
+  ["Potential nonpolar carbon contacts (atom pairs)", "carbon"],
+  ["Closest heavy-atom contact (Å)", "closest", 3]
+];
+const dockingValue = (record, key, digits) => record ? record[key].toFixed(digits ?? 0) : "—";
+const fileSource = (key, sheet = "") => `<p class="small">Source <strong>${safe(studyResults.files[key])}</strong>${sheet ? ` · ${safe(sheet)}` : ""}</p>`;
+
+function poseInteractions(compound) {
+  const record = studyResults.interactions[compound.id];
+  if (!record) return "";
+  return `<section class="panel"><h2>Selected-pose interaction analysis</h2>
+    <p>PLIP annotations for ${safe(record.pose)} use a different pose analysis from the four-candidate table. The two sets of contact counts should be read in their own contexts.</p>
+    ${details([["Hydrogen-bond records", value(record.hydrogen)], ["Hydrophobic records", value(record.hydrophobic)], ["Halogen-bond records", value(record.halogen)], ["Salt-bridge records", value(record.salt)], ["Hydrogen-bond residues", safe(record.hydrogenResidues.join(", "))]])}
+    ${fileSource("interactions", "Interaction_Summary and Hydrogen_Bonds")}</section>`;
+}
+
 function compoundImage(compound) {
   const src = compound.project ? assetPath(`./assets/compound-${compound.cid}.png`) : location.protocol === "file:" ? compound.imageUrl : `/api/depiction?cid=${encodeURIComponent(compound.cid)}`;
   return `<figure class="molecule"><img src="${safe(src)}" alt="2D chemical structure of ${safe(compound.name)}"><p hidden>Structure depiction unavailable. ${sourceLink(compound.source)}</p></figure>`;
@@ -150,14 +171,18 @@ function profile(compound) {
     ["InChIKey", `<code>${value(compound.inchiKey)}</code>`], ["SMILES", `<code>${value(compound.smiles)}</code>`]
   ];
   const observations = [...(compound.observations || [])].filter(item => item.label !== "Docked pose overlap with JWK");
+  const docking = studyResults.docking[compound.id];
   return `${heading(compound.project ? "Original project candidate" : "External compound · PubChem", compound.name, compound.description || "Chemical identity retrieved from PubChem. Compound-specific evidence awaits review.", printButton)}
   <div class="wrap page-body">${reportDate()}<div class="layout">
     <div class="stack">
       <section class="panel next"><p class="kicker">Next evidence needed</p><h2>${safe(next.title)}</h2><p>${safe(next.detail)}</p>${compound.project ? "" : `<p>${externalLink("Search Europe PMC", literatureLink(compound))}</p>`}</section>
       <section class="panel"><h2>Evidence Gap Detector</h2><p>Open the cited source to inspect a finding. “Not assessed” indicates a question awaiting review.</p>${evidenceTable(rows)}</section>
-      ${compound.project ? `<section class="panel"><div class="split"><h2>Original research</h2>${badge("Computational", "computational")}</div><p>Included in the four-compound docking and structural comparison. Final numerical outputs and candidate poses await import.</p>
+      ${docking ? `<section class="panel"><div class="split"><h2>Original docking results</h2>${badge("Computational", "computational")}</div><p>These values describe the modeled pose. Binding affinity and functional inhibition require their own evidence.</p>
+        ${details(dockingFields.map(([label,key,digits]) => [label,dockingValue(docking,key,digits)]))}
+        ${fileSource("docking")}
         ${observations.length ? `<ul class="steps">${observations.map(item => `<li><strong>${safe(item.label)}</strong><p>${safe(item.detail)}</p><small>${safe(item.source)}</small></li>`).join("")}</ul>` : ""}
         <p><a class="source-link" href="#research">Project provenance and sources</a></p></section>` : ""}
+      ${poseInteractions(compound)}
     </div>
     <aside class="stack"><section class="panel"><h2>Chemical identity</h2>${compoundImage(compound)}${details(idDetails)}
       ${compound.synonyms?.length ? `<details><summary>Synonyms</summary><p>${safe(compound.synonyms.slice(0, 20).join(" · "))}</p></details>` : ""}
@@ -174,6 +199,7 @@ function compared(selection) {
   return `<div class="table-wrap" tabindex="0" role="region" aria-label="Candidate comparison"><table class="compare-table">
     <thead><tr><th scope="col">Evidence category</th>${chosen.map(compound => `<th scope="col"><a class="source-link" href="${profileLink(compound)}">${safe(compound.name)}</a></th>`).join("")}</tr></thead>
     <tbody><tr><th scope="row">Known pharmacology</th>${chosen.map(compound => `<td>${safe(compound.target)}<div class="row-source">${sourceLink(compound.labelSource)}</div></td>`).join("")}</tr>
+    ${dockingFields.map(([label,key,digits]) => `<tr><th scope="row">${label}</th>${chosen.map(compound => `<td>${dockingValue(studyResults.docking[compound.id],key,digits)}</td>`).join("")}</tr>`).join("")}
     ${labels.map((label, i) => `<tr><th scope="row">${safe(label)}</th>${sets.map(rows => `<td>${evidenceBadge(rows[i].status)}<p>${safe(rows[i].detail)}</p>${rows[i].source ? `<div class="row-source">${sourceLink(rows[i].source)}</div>` : ""}</td>`).join("")}</tr>`).join("")}
     <tr class="next-row"><th scope="row">Next evidence needed</th>${chosen.map((compound, i) => {
       const step = nextStep(compound, sets[i]);
@@ -185,7 +211,29 @@ function comparison(selection) {
   return `${heading("Candidate comparison", "Compare research candidates", "Compare evidence and next steps for two to four compounds from the original project.", printButton)}
     <div class="wrap page-body">${reportDate()}<section class="panel"><fieldset class="choices no-print"><legend>Select candidates</legend>
     ${candidates.map(item => `<label class="choice"><input type="checkbox" value="${item.id}" ${selection.includes(item.id) ? "checked" : ""}>${safe(item.name)}</label>`).join("")}</fieldset>
-    <div id="comparison-table">${compared(selection)}</div><p class="small">Comparisons use the evidence available in the reviewed records. Each finding applies to its own assay, model, or study.</p></section></div>`;
+    <div id="comparison-table">${compared(selection)}</div>${fileSource("docking")}<p class="small">Each finding applies to its own assay, model, or study. Docking scores and contact counts describe modeled poses.</p></section></div>`;
+}
+
+function projectResults() {
+  const {redocking, models, domain, screening} = studyResults;
+  return `<section class="panel"><div class="split"><h2>Four-candidate docking comparison</h2>${badge("Computational", "computational")}</div>
+    <p>Tepotinib and ponatinib differ by just 0.010 kcal/mol in their docking scores. Pocket overlap and modeled contacts give additional context for follow-up.</p>
+    <figure class="study-figure"><img src="${assetPath("./assets/four-candidate-comparison.webp")}" alt="Comparative docking scores and structural contact counts for ponatinib, tepotinib, entrectinib and nilotinib">
+    <figcaption>Supplied project figure. A numeric version is available in <a class="source-link" href="#compare">Compare</a>.</figcaption></figure>
+    ${fileSource("docking")}</section>
+    <div class="results-grid">
+    <section class="panel"><h2>Reference redocking</h2><p>The modeled JWK pose was compared with its experimental pose in human TNIK (6RA7).</p>
+    ${details([["Direct RMSD", value(redocking.rmsd.toFixed(3), "Å")], ["Project threshold", value(redocking.threshold.toFixed(1), "Å")], ["Heavy atoms matched", value(redocking.atoms)], ["Vina version", value(redocking.vina)]])}
+    <p class="small">The reported RMSD met the project’s pose-reproduction threshold.</p>${fileSource("redocking")}</section>
+    <section class="panel"><h2>Analogue screening</h2><p>The virtual screen generated ${screening.generated} analogues, retained ${screening.similar} after similarity filtering, and shortlisted ${screening.shortlisted}.</p>
+    ${details([["Met both drug-likeness filters", value(screening.compliant)], ["Similarity cutoff", value(screening.similarityThreshold)]])}
+    <p class="small">These are computational screening counts. The shortlist requires experimental follow-up.</p>${fileSource("screening", "Analogue_generation_summary and Top_22_integrated_candidates")}</section>
+    </div>
+    <section class="panel"><h2>Model evaluation</h2><p>Held-out results for five models on ${models[0].testCount} compounds. RMSE and MAE are in pIC₅₀ units.</p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="Model evaluation"><table><thead><tr><th scope="col">Model</th><th scope="col">Test R²</th><th scope="col">Test RMSE</th><th scope="col">Test MAE</th></tr></thead>
+    <tbody>${models.map(model => `<tr><th scope="row">${safe(model.name)}</th><td>${model.r2.toFixed(4)}</td><td>${model.rmse.toFixed(4)}</td><td>${model.mae.toFixed(4)}</td></tr>`).join("")}</tbody></table></div>
+    <p>Random Forest had the lowest test error in this comparison. Its mean absolute error was ${domain.insideMAE.toFixed(3)} for ${domain.inside} compounds inside the similarity domain and ${domain.outsideMAE.toFixed(3)} for ${domain.outside} outside it (similarity cutoff ${domain.threshold}). The outside-domain group is small.</p>
+    ${fileSource("models", "Model_Comparison and AD_Summary")}</section>`;
 }
 
 function research() {
@@ -194,8 +242,9 @@ function research() {
     <div class="research-grid">
       <section class="panel">${square("atom")}<h2>Human TNIK</h2><p>${safe(target.description)}</p>${details([["Protein", safe(target.name)], ["Reference structure", "6RA7 · TNIK with JWK"], ["Method", "X-ray diffraction · 1.20 Å"]])}<p>${sourceLink(target.source)} · ${externalLink("View structure in RCSB", target.structure.viewer)}</p></section>
       <section class="panel">${square("flask", "purple")}<h2>Why pulmonary fibrosis?</h2><p>Idiopathic pulmonary fibrosis is a progressive scarring disease of the lungs. TNIK has been investigated as a therapeutic target in fibrosis research, including a phase 2a study of rentosertib in IPF.</p><p>That study provides context for the target. It assessed rentosertib and its specific study population.</p><p>${externalLink("Read the phase 2a study", publications[0].url)}</p></section>
-      <section class="panel">${square("layers", "blue")}<h2>Original study</h2><p>The supplied workflow describes curated TNIK bioactivity, model evaluation, virtual screening, and comparison against a crystallographic reference.</p><p>The project files support the included candidate identities and reported qualitative findings. The saved model, approved result tables, and verified simulation outputs are needed to add their results.</p></section>
+      <section class="panel">${square("layers", "blue")}<h2>Original study</h2><p>The workflow covers curated TNIK bioactivity, model evaluation, virtual screening, and comparison against a crystallographic reference.</p><p>The project tables supply docking, redocking, pose annotations, model evaluation, and analogue screening results. Live predictions require the trained model.</p></section>
     </div>
+    ${projectResults()}
     <section><div class="section-title"><div><h2>Selected publications</h2><p>Primary studies with summaries and limitations.</p></div></div>
     <div class="paper-grid">${publications.map(paper => `<article class="card paper-card">${badge(paper.type, paper.type === "Clinical trial" ? "teal" : "")}<h3>${safe(paper.title)}</h3><p class="pub-meta">${safe(paper.authors)} · ${safe(paper.journal)} · ${safe(paper.year)}</p><p>${safe(paper.summary)}</p><p><strong>Study scope:</strong> ${safe(paper.limitation)}</p><p>${externalLink("DOI " + paper.doi, paper.url)}</p></article>`).join("")}</div></section>
     <section class="panel"><h2>Data sources</h2>${details(sources.map(source => [source.label, `${safe(source.role)} · ${externalLink("Source", source.url)}`]))}</section>

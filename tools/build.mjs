@@ -55,8 +55,8 @@ if (process.argv[2]) {
     const asset = inlineAssets[match.slice(5, -2)];
     return asset ? 'url("' + asset + '")' : "none";
   });
-  const scripts = [api, await read("public/data.js"), removeImports(await read("public/app.js"))]
-    .map(removeExports).join("\n");
+  const scripts = [api, await read("public/results.js"), await read("public/data.js"), await read("public/app.js")]
+    .map(code => removeExports(removeImports(code))).join("\n");
   const html = (await read("public/index.html"))
     .replace('href="/assets/mark.svg"', 'href="' + inlineAssets["./assets/mark.svg"] + '"')
     .replace('<link rel="stylesheet" href="/styles.css">', () => "<style>" + css + "</style>")

@@ -1,3 +1,5 @@
+import {studyResults} from "./results.js";
+
 // Chemical descriptors transcribed from the individual PubChem Compound records.
 // Project script literals are provisional until checked against the original outputs.
 const pubchem = cid => `https://pubchem.ncbi.nlm.nih.gov/compound/${cid}`;
@@ -17,10 +19,6 @@ export const target = {
     viewer: 'https://www.rcsb.org/3d-view/6RA7',
     download: 'https://files.rcsb.org/download/6RA7.pdb',
     pocket: 'https://www.rcsb.org/ligand-validation/6RA7/JWK'
-  },
-  redocking: {
-    rmsdAngstrom: 0.782, thresholdAngstrom: 2.0, heavyAtoms: 22, vinaScore: -9.770,
-    status: 'Provisional · embedded in supplied script', source: 'TNIK_redocking_validation_summary.py'
   }
 };
 
@@ -142,12 +140,6 @@ export const publications = [
   }
 ];
 
-export const modelMetrics = [
-  { label: 'Held-out R²', value: 0.4914, source: 'train_tnik_additional_models.py', status: 'Provisional' },
-  { label: 'Held-out RMSE (pIC₅₀)', value: 0.7976, source: 'train_tnik_additional_models.py', status: 'Provisional' },
-  { label: 'Held-out MAE (pIC₅₀)', value: 0.5917, source: 'train_tnik_additional_models.py', status: 'Provisional' }
-];
-
 export const simulation = {
   label: 'Preliminary restrained simulations', status: 'Provisional · embedded in supplied plotting script',
   source: 'generate_MD_figures.py',
@@ -206,11 +198,12 @@ export function evidenceFor(compound, lookup = {}) {
   );
   const nilotinib = Number(compound.cid) === 644241 || compound.id === 'nilotinib';
   const labelSource = compound.labelSource || null;
+  const docking = studyResults.docking[compound.id];
 
   return [
-    row('computational', 'Computational TNIK interaction', compound.project ? 'partial' : 'not_assessed',
-      compound.project ? 'Included in the original docking and structural comparison. The pose is a computational hypothesis.' : 'Original project evidence covers the four supplied candidates.',
-      compound.project ? projectSource : null),
+    row('computational', 'Computational TNIK interaction', docking ? 'supported' : 'not_assessed',
+      docking ? `Reported docking score: ${docking.score.toFixed(3)} kcal/mol. The modeled pose shares ${docking.overlap} pocket residues with the JWK reference. These are computational results.` : 'Original project evidence covers the four supplied candidates.',
+      docking ? {label: studyResults.files.docking} : null),
     binding,
     inhibition,
     row('cellular', 'Pulmonary fibroblast evidence', nilotinib ? 'supported' : 'not_assessed',
