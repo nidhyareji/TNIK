@@ -1,0 +1,8 @@
+{
+  "name": "tnik-insight",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "scripts": {"start": "node server/local.mjs", "build": "node tools/build.mjs", "test": "node --test tools/checks.mjs"}
+}
